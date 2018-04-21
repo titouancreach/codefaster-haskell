@@ -1,4 +1,3 @@
-
 import System.Random (randomRIO)
 
 readFileLines :: FilePath -> IO [String]
@@ -23,4 +22,4 @@ getValidRandomLine xs = getRandomLine xs >>= (\line -> if isLineValid line then 
 --    if isLineValid line then return line else getValidRandomLine xs  
 
 
-main = readFileLines "./codefaster.hs" >>= getValidRandomLine >>= putStrLn  
+main = readFileLines "./codefaster.hs" >>= getValidRandomLine >>= putStrLn
