@@ -4,11 +4,37 @@ import System.Exit
 import System.Posix.Signals
 import Control.Concurrent
 import Control.Concurrent.MVar
+import Data.Char (isSpace)
 
+trim :: String -> String
+trim = f . f
+   where f = reverse . dropWhile isSpace
+
+data Response = Response Integer Integer
+
+instance Show Response where
+    show (Response x y) = "good: " ++ show x ++ " bad: " ++ show y
+
+goodAnswer :: Response -> Integer
+goodAnswer (Response x _) = x
+
+badAnswer :: Response -> Integer
+badAnswer (Response _ x) = x
+
+anwsers :: Response -> Integer
+anwsers (Response x y) = x + y
+
+addGoodAnswer :: Response -> Response
+addGoodAnswer (Response x y) = Response (x + 1) y
+
+addBadAnswer :: Response -> Response
+addBadAnswer (Response x y) = Response x $ y + 1
 
 
 readFileLines :: FilePath -> IO [String]
 readFileLines path = lines <$> readFile path
+
+
 
 -- Pick a random line from a file
 getRandomLine :: [String] -> IO String
@@ -19,33 +45,40 @@ isLineValid :: String -> Bool
 isLineValid "" = False
 isLineValid _ = True
 
--- This would probably infinite loop if no lines are valid
-getValidRandomLine :: [String] -> IO String
-getValidRandomLine xs = getRandomLine xs >>= (\line -> if isLineValid line then return line else getValidRandomLine xs)
+cleanLines :: [String] -> [String]
+cleanLines = filter isLineValid . fmap trim
 
--- Do notation version
--- getValidRandomLine xs = do 
---    line <- getRandomLine xs
---    if isLineValid line then return line else getValidRandomLine xs  
-
-goInfinitWithAcc :: MVar Integer -> IO ()
-goInfinitWithAcc mv = do
+getInfiniteInput :: MVar Response -> [String] -> IO ()
+getInfiniteInput mv total = do
+    randomLine <- getRandomLine total
+    print randomLine
     line <- getLine
-    print line
+
+    print $ line == randomLine
     t <- takeMVar mv
-    putMVar mv $ t + 1
+    if line == randomLine then
+        putMVar mv $ addGoodAnswer t
+    else
+        putMVar mv $ addBadAnswer t
+
+    --putMVar mv $ addGoodAnswer t
     print t
-    goInfinitWithAcc mv
+    getInfiniteInput mv total
 
+main = do
+    fileLines <- readFileLines "./codefaster.hs"
+    mvar <- newMVar $ Response 0 0
+    let totalLines = cleanLines fileLines
+    timeout 50000000 $ getInfiniteInput mvar totalLines
+    --randomLine <- getRandomLine fileLines
+    --print randomLine
 
-getInfiniteInput :: MVar Integer -> IO ()
-getInfiniteInput mvar = goInfinitWithAcc mvar
+--main = readFileLines "./codefaster.hs" >>= return . cleanLines >>= getRandomLine
 
--- main = readFileLines "./codefaster.hs" >>= getValidRandomLine >>= putStrLn
-main = do 
-    mvar <- newMVar 0
-    line <- timeout 5000000 $ getInfiniteInput mvar
-    t <- takeMVar mvar
-    print t
-    print line
+--main = do 
+--    mvar <- newMVar 0
+--    line <- timeout 5000000 $ getInfiniteInput mvar
+--    t <- takeMVar mvar
+--    print t
+--    print line
 
