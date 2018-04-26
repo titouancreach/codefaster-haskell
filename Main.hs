@@ -1,3 +1,5 @@
+module Main where
+
 import System.Random (randomRIO)
 import System.Timeout (timeout)
 import System.Exit
@@ -5,6 +7,12 @@ import System.Posix.Signals
 import Control.Concurrent
 import Control.Concurrent.MVar
 import Data.Char (isSpace)
+import Debug.Trace
+
+import Text.Regex.Base
+import Text.Regex
+
+import qualified Config as Config
 
 trim :: String -> String
 trim = f . f
@@ -13,7 +21,7 @@ trim = f . f
 data Response = Response Integer Integer
 
 instance Show Response where
-    show (Response x y) = "good: " ++ show x ++ " bad: " ++ show y
+    show (Response x y) = "Response(" ++ show x ++ ", " ++ show y ++ ")"
 
 goodAnswer :: Response -> Integer
 goodAnswer (Response x _) = x
@@ -35,50 +43,47 @@ readFileLines :: FilePath -> IO [String]
 readFileLines path = lines <$> readFile path
 
 
+printResult :: Response -> IO ()
+printResult (Response x y) = putStrLn $ "\nyou typed " ++ show x ++ " correct lines and " ++ show y ++ " incorrect lines"
+
 
 -- Pick a random line from a file
 getRandomLine :: [String] -> IO String
-getRandomLine xs = fmap (xs !! ) $ randomRIO (0, length xs - 10)
+getRandomLine xs = fmap (xs !! ) $ randomRIO (0, length xs - 1)
 
--- Let's say the line is valid if it is not empty
-isLineValid :: String -> Bool
-isLineValid "" = False
-isLineValid _ = True
+
+improvedIgnored :: [Regex]
+improvedIgnored = (mkRegex "^$") : Config.ignore 
+
+checkIgnored :: [Regex] -> String -> Bool
+checkIgnored regs s =  not $ any id $ map (\x -> matchTest x s) regs
 
 cleanLines :: [String] -> [String]
-cleanLines = filter isLineValid . fmap trim
+cleanLines = filter (checkIgnored improvedIgnored) . fmap trim
 
 getInfiniteInput :: MVar Response -> [String] -> IO ()
 getInfiniteInput mv total = do
+   
     randomLine <- getRandomLine total
-    print randomLine
+    putStrLn randomLine
     line <- getLine
 
-    print $ line == randomLine
     t <- takeMVar mv
     if line == randomLine then
         putMVar mv $ addGoodAnswer t
     else
         putMVar mv $ addBadAnswer t
 
-    --putMVar mv $ addGoodAnswer t
-    print t
     getInfiniteInput mv total
+
+toMicroSecond :: Int -> Int
+toMicroSecond x = x * 1000000
 
 main = do
     fileLines <- readFileLines "./codefaster.hs"
     mvar <- newMVar $ Response 0 0
     let totalLines = cleanLines fileLines
-    timeout 50000000 $ getInfiniteInput mvar totalLines
-    --randomLine <- getRandomLine fileLines
-    --print randomLine
-
---main = readFileLines "./codefaster.hs" >>= return . cleanLines >>= getRandomLine
-
---main = do 
---    mvar <- newMVar 0
---    line <- timeout 5000000 $ getInfiniteInput mvar
---    t <- takeMVar mvar
---    print t
---    print line
-
+    timeout (toMicroSecond Config.timeout) $ getInfiniteInput mvar totalLines
+    result <- takeMVar mvar
+    printResult result
+   
